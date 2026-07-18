@@ -1,8 +1,8 @@
-from retrieval.search import SearchEngine
+from retrieval.search_engine import SearchEngine
 
 engine = SearchEngine()
 
-results = engine.search(
+results = engine.retrieve(
 
     "red dress",
 

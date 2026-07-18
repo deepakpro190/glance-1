@@ -82,7 +82,11 @@ class FashionReranker:
             if style.lower() in image_styles:
                 matched += 1
 
-        return matched / len(query_styles)
+        if matched > 0:
+            return matched / len(query_styles)
+
+        # Fallback inference when explicit style tags are sparse in metadata.
+        return 0.0
 
     ###############################################################
 
@@ -129,6 +133,11 @@ class FashionReranker:
                 parsed_query.get("styles", []),
                 candidate.get("styles", [])
             )
+            if style == 0.0 and parsed_query.get("styles", []):
+                style = self._infer_style_from_categories(
+                    parsed_query.get("styles", []),
+                    candidate.get("categories", []),
+                )
             environment = self.environment_score(
                 parsed_query.get("environments", []),
                 candidate.get("environments", [])
@@ -189,3 +198,27 @@ class FashionReranker:
             item["final_score"] = round(90.0 + 10.0 * min(1.0, final_ratio), 2)
 
         return results
+
+    ###############################################################
+
+    def _infer_style_from_categories(self, query_styles, image_categories):
+        categories = {str(c).lower().strip() for c in image_categories if c}
+        if not categories:
+            return 0.0
+
+        style_category_map = {
+            "formal": {"dress", "shirt", "tie", "blazer", "jacket", "trousers", "suit"},
+            "casual": {"t shirt", "jeans", "shorts", "sneakers", "hoodie"},
+            "sporty": {"sneakers", "leggings", "tracksuit", "jersey"},
+            "party": {"dress", "heels", "skirt", "blouse"},
+        }
+
+        best = 0.0
+        for style in query_styles:
+            hints = style_category_map.get(str(style).lower(), set())
+            if not hints:
+                continue
+            if any((h in cat) or (cat in h) for h in hints for cat in categories):
+                best = max(best, 0.35)
+
+        return best

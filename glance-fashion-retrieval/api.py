@@ -67,9 +67,19 @@ def health():
 def search(q: str = Query(...)):
     parsed_query = engine.query_parser.parse(q)
     results = engine.retrieve(q)
+    retrieval_meta = getattr(engine, 'last_retrieval_meta', {}) or {}
     return {
         'query': q,
         'parsed_terms': sorted(parsed_query.get('extracted_terms', [])),
+        'parsed': {
+            'colors': parsed_query.get('colors', []),
+            'categories': parsed_query.get('categories', []),
+            'styles': parsed_query.get('styles', []),
+            'environments': parsed_query.get('environments', []),
+            'attribute_bindings': parsed_query.get('attribute_bindings', []),
+        },
+        'retrieval_mode': retrieval_meta.get('mode', 'default'),
+        'message': retrieval_meta.get('message', ''),
         'results': [
             {
                 'image_id': item['image_id'],

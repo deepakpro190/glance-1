@@ -47,7 +47,11 @@ class SigLIPEmbedder:
 
             outputs = self.model.get_image_features(**inputs)
 
-            embeddings = outputs.pooler_output
+            # transformers may return either a tensor or an object with pooler_output
+            if hasattr(outputs, "pooler_output"):
+                embeddings = outputs.pooler_output
+            else:
+                embeddings = outputs
 
             embeddings = embeddings / embeddings.norm(
                 dim=-1,

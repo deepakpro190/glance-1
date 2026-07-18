@@ -71,6 +71,17 @@ class SearchEngine:
 
             self.metadata = json.load(f)
 
+        self.metadata_by_image_id = {
+            int(item.get("image_id")): item
+            for item in self.metadata.values()
+            if item.get("image_id") is not None
+        }
+
+        self.last_retrieval_meta = {
+            "mode": "default",
+            "message": "",
+        }
+
         print("Metadata Loaded.")
 
         self.learned_reranker = LearnedReranker()
@@ -81,6 +92,89 @@ class SearchEngine:
             self.learned_reranker.fit(self.metadata)
 
         print("=" * 60)
+
+    #########################################################
+
+    def _has_any_constraints(self, parsed_query):
+        return any([
+            bool(parsed_query.get("categories", [])),
+            bool(parsed_query.get("colors", [])),
+            bool(parsed_query.get("styles", [])),
+            bool(parsed_query.get("environments", [])),
+            bool(parsed_query.get("attribute_bindings", [])),
+        ])
+
+    #########################################################
+
+    def _candidate_matches(self, candidate, parsed_query, strict=True):
+        query_categories = set(parsed_query.get("categories", []))
+        query_colors = set(parsed_query.get("colors", []))
+        query_styles = set(parsed_query.get("styles", []))
+        query_environments = set(parsed_query.get("environments", []))
+        bindings = parsed_query.get("attribute_bindings", [])
+
+        cand_categories = set((candidate.get("categories") or []))
+        cand_colors = set((candidate.get("colors") or []))
+        cand_styles = set((candidate.get("styles") or []))
+        cand_envs = set((candidate.get("environments") or []))
+
+        if strict:
+            if query_categories and not query_categories.issubset(cand_categories):
+                return False
+            if query_colors and not query_colors.issubset(cand_colors):
+                return False
+            if query_styles and not (query_styles & cand_styles) and candidate.get("style_score", 0.0) <= 0.0:
+                return False
+            if query_environments and not (query_environments & cand_envs) and candidate.get("environment_score", 0.0) <= 0.0:
+                return False
+
+            # For strict compositional intent, enforce category + color co-presence.
+            for binding in bindings:
+                obj = binding.get("object")
+                color = binding.get("color")
+                if obj and obj not in cand_categories:
+                    return False
+                if color and color not in cand_colors:
+                    return False
+            return True
+
+        # Relaxed mode: must satisfy category if provided, and enough soft hints
+        # to avoid vague fallbacks.
+        if query_categories and not (query_categories & cand_categories):
+            return False
+
+        if query_categories and candidate.get("category_score", 0.0) < 0.5:
+            return False
+
+        soft_hits = 0
+        if query_colors and (query_colors & cand_colors):
+            soft_hits += 1
+        if query_styles and ((query_styles & cand_styles) or candidate.get("style_score", 0.0) > 0.0):
+            soft_hits += 1
+        if query_environments and ((query_environments & cand_envs) or candidate.get("environment_score", 0.0) > 0.0):
+            soft_hits += 1
+        if bindings:
+            for binding in bindings:
+                obj = binding.get("object")
+                color = binding.get("color")
+                if obj in cand_categories and color in cand_colors:
+                    soft_hits += 1
+                    break
+
+        # If only categories are requested, category overlap is enough.
+        if query_categories and not (query_colors or query_styles or query_environments or bindings):
+            return True
+
+        requested_soft_signals = int(bool(query_colors)) + int(bool(query_styles)) + int(bool(query_environments)) + int(bool(bindings))
+
+        # Keep complex compositional prompts conservative, but allow useful
+        # category+color fallbacks when style/environment tags are sparse.
+        if query_categories and query_colors and requested_soft_signals <= 2:
+            min_soft_hits = 1
+        else:
+            min_soft_hits = 1 if requested_soft_signals <= 1 else 2
+
+        return soft_hits >= min_soft_hits
 
     #########################################################
 
@@ -117,6 +211,8 @@ class SearchEngine:
 
     def retrieve(self, query, top_k=TOP_K):
 
+        self.last_retrieval_meta = {"mode": "default", "message": ""}
+
         query_embedding = self.encode_query(query)
 
         scores, indices = self.index.search(
@@ -133,14 +229,9 @@ class SearchEngine:
             if idx < 0:
                 continue
             image_id = int(self.image_ids[idx])
-            meta_lookup = None
-            for meta_item in self.metadata.values():
-                if int(meta_item.get("image_id", -1)) == image_id:
-                    meta_lookup = meta_item
-                    break
-            if meta_lookup is None:
+            meta = self.metadata_by_image_id.get(image_id)
+            if meta is None:
                 continue
-            meta = meta_lookup
 
             candidates.append({
                 "image_id": image_id,
@@ -176,4 +267,49 @@ class SearchEngine:
             item["final_score"] = item.get("final_score", 0.0)
 
         bound_results.sort(key=lambda x: x["final_score"], reverse=True)
-        return bound_results
+
+        if not self._has_any_constraints(parsed_query):
+            return bound_results
+
+        strict_results = [
+            item for item in bound_results
+            if self._candidate_matches(item, parsed_query, strict=True)
+        ]
+        if strict_results:
+            self.last_retrieval_meta = {
+                "mode": "strict",
+                "message": "Showing strict matches for all requested constraints.",
+            }
+            return strict_results
+
+        relaxed_results = [
+            item for item in bound_results
+            if self._candidate_matches(item, parsed_query, strict=False)
+        ]
+        if relaxed_results:
+            self.last_retrieval_meta = {
+                "mode": "relaxed",
+                "message": "No exact match found; showing closest relevant matches.",
+            }
+            return relaxed_results
+
+        # Final conservative fallback: high-confidence category matches only.
+        query_categories = set(parsed_query.get("categories", []))
+        has_bindings = bool(parsed_query.get("attribute_bindings", []))
+        if query_categories and not has_bindings:
+            category_only = [
+                item for item in bound_results
+                if item.get("category_score", 0.0) >= 0.9
+            ]
+            if category_only:
+                self.last_retrieval_meta = {
+                    "mode": "relaxed",
+                    "message": "No exact attribute match found; showing closest category matches.",
+                }
+                return category_only
+
+        self.last_retrieval_meta = {
+            "mode": "none",
+            "message": "No strict or close match found for this query.",
+        }
+        return []

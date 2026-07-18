@@ -13,6 +13,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [parsedTerms, setParsedTerms] = useState([]);
+  const [parsed, setParsed] = useState({ colors: [], styles: [], environments: [], categories: [] });
+  const [retrievalMode, setRetrievalMode] = useState('default');
+  const [retrievalMessage, setRetrievalMessage] = useState('');
   const backendBaseUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8001';
 
   const search = async (inputQuery) => {
@@ -29,11 +32,17 @@ function App() {
         throw new Error(data.detail || 'Request failed');
       }
       setParsedTerms(data.parsed_terms || []);
+      setParsed(data.parsed || { colors: [], styles: [], environments: [], categories: [] });
+      setRetrievalMode(data.retrieval_mode || 'default');
+      setRetrievalMessage(data.message || '');
       setResults(data.results || []);
     } catch (err) {
       setError(err.message || 'Something went wrong');
       setResults([]);
       setParsedTerms([]);
+      setParsed({ colors: [], styles: [], environments: [], categories: [] });
+      setRetrievalMode('default');
+      setRetrievalMessage('');
     } finally {
       setLoading(false);
     }
@@ -50,6 +59,11 @@ function App() {
       avgEmbedding: (results.reduce((sum, item) => sum + item.embedding_score, 0) / results.length).toFixed(2),
     };
   }, [results]);
+
+  const hasColorConstraint = (parsed.colors || []).length > 0;
+  const hasStyleConstraint = (parsed.styles || []).length > 0;
+  const hasEnvironmentConstraint = (parsed.environments || []).length > 0;
+  const metricText = (enabled, value) => (enabled ? value : 'N/A');
 
   return (
     <div className="app-shell">
@@ -83,6 +97,18 @@ function App() {
       </section>
 
       {error ? <div className="error">{error}</div> : null}
+      {!error && retrievalMessage ? <div className="error">{retrievalMessage}</div> : null}
+
+      {!error && !loading && !results.length && query.trim() ? (
+        <section className="panel stats-panel">
+          <h2>No results</h2>
+          <p className="subtitle">
+            {retrievalMode === 'none'
+              ? 'No strict or close match found. Try relaxing one attribute such as color, style, or location.'
+              : 'No results found for this query.'}
+          </p>
+        </section>
+      ) : null}
 
       {results.length ? (
         <>
@@ -139,9 +165,9 @@ function App() {
                   <div className="metrics-grid">
                     <div><span>Embedding</span><strong>{item.embedding_score}</strong></div>
                     <div><span>Category</span><strong>{item.category_score}</strong></div>
-                    <div><span>Color</span><strong>{item.color_score}</strong></div>
-                    <div><span>Style</span><strong>{item.style_score}</strong></div>
-                    <div><span>Environment</span><strong>{item.environment_score}</strong></div>
+                    <div><span>Color</span><strong>{metricText(hasColorConstraint, item.color_score)}</strong></div>
+                    <div><span>Style</span><strong>{metricText(hasStyleConstraint, item.style_score)}</strong></div>
+                    <div><span>Environment</span><strong>{metricText(hasEnvironmentConstraint, item.environment_score)}</strong></div>
                     <div><span>Object</span><strong>{item.object_score}</strong></div>
                   </div>
                   <div className="details-grid">
