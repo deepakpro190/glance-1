@@ -4,6 +4,23 @@ Multimodal fashion image retrieval on Fashionpedia using SigLIP + FAISS + struct
 
 This README reflects the current code in this workspace.
 
+## Assignment Q&A (Max 5)
+
+### 1) What baseline were we trying to beat?
+Vanilla SigLIP/CLIP + FAISS nearest-neighbor retrieval using only text-image similarity. That baseline is strong for broad semantics, but weak on compositional constraints like color-object binding and query intent details.
+
+### 2) Why did we use SigLIP + FAISS instead of training a new end-to-end model?
+SigLIP gives strong zero-shot visual-language embeddings, and FAISS gives fast scalable nearest-neighbor retrieval. This matches the assignment goal of practical multimodal retrieval without expensive full-model retraining.
+
+### 3) Why add query parsing and ontology normalization?
+User prompts contain synonyms and structured intent (category, color, style, environment). Ontology-driven parsing converts free text into stable constraints so the system can reason beyond raw embedding similarity.
+
+### 4) Why not rely only on strict filtering?
+Strict-only retrieval improves precision but can return empty results too often due to sparse/noisy metadata. We use strict + relaxed fallback modes so users still get relevant results when exact matches are unavailable.
+
+### 5) How is this better than vanilla retrieval in practice?
+This system adds structured reranking and constraint-aware selection on top of embedding search. In short: better control over query intent, clearer score breakdowns, and more useful behavior for real-world queries than plain nearest-neighbor similarity alone.
+
 ## What Is Implemented
 
 - SigLIP text/image embedding retrieval via FAISS.
@@ -12,8 +29,8 @@ This README reflects the current code in this workspace.
 - Multi-component reranking with score breakdown fields.
 - Retrieval fallback modes exposed to UI/API:
     - `strict`: exact constraint satisfaction
-    - `relaxed`: close constrained match
-    - `none`: no reliable match found
+    - `relaxed`: closest useful match when strict fails
+    - `none`: no reliable match available
 - FastAPI backend and React (Vite) frontend demo.
 
 ## Current Pipeline
@@ -25,7 +42,7 @@ flowchart LR
         E --> F[FAISS top-k search]
         F --> C[Candidate metadata join]
         C --> R[FashionReranker + BoundPairReranker + LearnedReranker score blend]
-        R --> M[Strict/Relaxed/None selector]
+    R --> M[Strict then Relaxed selector]
         M --> A[API response with component scores and retrieval message]
 ```
 
@@ -60,8 +77,6 @@ glance-fashion-retrieval/
         faiss/
 ```
 
-## Environment Setup
-
 ## Quick Start (Run On Any PC)
 
 Clone and run with the same flow used in this repo:
@@ -79,6 +94,14 @@ Install backend dependencies:
 pip install torch transformers datasets faiss-cpu numpy pillow tqdm scikit-learn joblib fastapi "uvicorn[standard]" pytest
 ```
 
+Install frontend dependencies:
+
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
 Build artifacts (skip this if artifacts are already present and valid):
 
 ```powershell
@@ -90,75 +113,30 @@ Build artifacts (skip this if artifacts are already present and valid):
 Run backend:
 
 ```powershell
-..\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8001
+..\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8000
 ```
 
 In a second terminal, run frontend:
 
 ```powershell
-cd ..\glance-fashion-retrieval\frontend
-npm install
+cd frontend
 npm run dev
 ```
 
-Open the local frontend URL shown by Vite and search. If the UI cannot connect, verify backend is live at http://127.0.0.1:8001/health.
+Open the local frontend URL shown by Vite and search.
 
-From workspace root:
+Backend health check:
 
-```powershell
-Set-Location c:\glance\glance-fashion-retrieval
-python -m venv c:\glance\.venv
-c:\glance\.venv\Scripts\activate
+```text
+http://127.0.0.1:8000/health
 ```
 
-Install backend dependencies:
+Frontend currently tries `VITE_BACKEND_URL` first, and can fall back between localhost ports `8000` and `8001`.
+
+## Optional CLI Mode
 
 ```powershell
-pip install torch transformers datasets faiss-cpu numpy pillow tqdm scikit-learn joblib fastapi "uvicorn[standard]" pytest
-```
-
-Frontend dependencies:
-
-```powershell
-Set-Location c:\glance\glance-fashion-retrieval\frontend
-npm install
-```
-
-## Build / Rebuild Artifacts
-
-From `c:\glance\glance-fashion-retrieval`:
-
-```powershell
-c:\glance\.venv\Scripts\python.exe build_embeddings.py
-c:\glance\.venv\Scripts\python.exe build_metadata.py
-c:\glance\.venv\Scripts\python.exe build_faiss.py
-```
-
-Notes:
-- `build_metadata.py` uses image IDs from `artifacts/embeddings/image_ids.json`.
-- Rebuild can take time because Fashionpedia is loaded through Hugging Face datasets.
-
-## Run The System
-
-Backend API:
-
-```powershell
-Set-Location c:\glance\glance-fashion-retrieval
-c:\glance\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8001
-```
-
-Frontend:
-
-```powershell
-Set-Location c:\glance\glance-fashion-retrieval\frontend
-npm run dev
-```
-
-CLI mode:
-
-```powershell
-Set-Location c:\glance\glance-fashion-retrieval
-c:\glance\.venv\Scripts\python.exe main.py
+..\.venv\Scripts\python.exe main.py
 ```
 
 ## API Contract
@@ -193,32 +171,32 @@ c:\glance\.venv\Scripts\python.exe main.py
 Run tests:
 
 ```powershell
-Set-Location c:\glance\glance-fashion-retrieval
-c:\glance\.venv\Scripts\python.exe -m pytest tests/test_retrieval_components.py -q
+..\.venv\Scripts\python.exe -m pytest tests/test_retrieval_components.py -q
 ```
 
 Run the simple evaluation script:
 
 ```powershell
-Set-Location c:\glance\glance-fashion-retrieval
-c:\glance\.venv\Scripts\python.exe evaluate.py
+..\.venv\Scripts\python.exe evaluate.py
 ```
 
 ## Retrieval Behavior Notes
 
-- Complex compositional constraints can intentionally return `none` when the index has no reliable match.
+- Color and category queries are intentionally relaxed to avoid empty outputs.
+- Complex compositional queries may still return `none` if no reliable match exists.
 - `style_score` and `environment_score` can be low when metadata labels are sparse; the UI treats unrequested facets as `N/A`.
 - Query quality depends heavily on the metadata artifact quality and category coverage in the indexed set.
 
 ## Troubleshooting
 
 - `Failed to fetch` in frontend:
-    - Verify backend is running on `127.0.0.1:8001`.
+    - Verify backend is running on `127.0.0.1:8000`.
     - Check `VITE_BACKEND_URL` if you changed ports.
+    - Restart frontend dev server after changing backend URL settings.
 - Slow startup:
     - First run downloads/loads model and dataset caches.
 - Empty results:
-    - Check `retrieval_mode` and `message` from API to see if this is an intentional strict rejection.
+    - Check `retrieval_mode` and `message` from API for strict vs relaxed fallback status.
 
 ## License
 

@@ -16,7 +16,13 @@ function App() {
   const [parsed, setParsed] = useState({ colors: [], styles: [], environments: [], categories: [] });
   const [retrievalMode, setRetrievalMode] = useState('default');
   const [retrievalMessage, setRetrievalMessage] = useState('');
-  const backendBaseUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8001';
+  const backendBaseUrl = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+
+  const getFallbackBackendUrl = (baseUrl) => {
+    if (baseUrl.includes('127.0.0.1:8000')) return 'http://127.0.0.1:8001';
+    if (baseUrl.includes('127.0.0.1:8001')) return 'http://127.0.0.1:8000';
+    return null;
+  };
 
   const search = async (inputQuery) => {
     const q = inputQuery.trim();
@@ -26,8 +32,21 @@ function App() {
     setError('');
 
     try {
-      const response = await fetch(`${backendBaseUrl}/search?q=${encodeURIComponent(q)}`);
-      const data = await response.json();
+      let response;
+      let data;
+
+      try {
+        response = await fetch(`${backendBaseUrl}/search?q=${encodeURIComponent(q)}`);
+        data = await response.json();
+      } catch (networkErr) {
+        const fallbackUrl = getFallbackBackendUrl(backendBaseUrl);
+        if (!fallbackUrl) {
+          throw networkErr;
+        }
+        response = await fetch(`${fallbackUrl}/search?q=${encodeURIComponent(q)}`);
+        data = await response.json();
+      }
+
       if (!response.ok) {
         throw new Error(data.detail || 'Request failed');
       }

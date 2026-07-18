@@ -138,43 +138,29 @@ class SearchEngine:
                     return False
             return True
 
-        # Relaxed mode: must satisfy category if provided, and enough soft hints
-        # to avoid vague fallbacks.
+        # Relaxed mode: focus on practical category/color matching.
+        # Style/environment are treated as soft hints only.
         if query_categories and not (query_categories & cand_categories):
             return False
 
-        if query_categories and candidate.get("category_score", 0.0) < 0.5:
+        if query_categories and candidate.get("category_score", 0.0) < 0.3:
             return False
 
-        soft_hits = 0
-        if query_colors and (query_colors & cand_colors):
-            soft_hits += 1
-        if query_styles and ((query_styles & cand_styles) or candidate.get("style_score", 0.0) > 0.0):
-            soft_hits += 1
-        if query_environments and ((query_environments & cand_envs) or candidate.get("environment_score", 0.0) > 0.0):
-            soft_hits += 1
+        if query_colors and not (query_colors & cand_colors):
+            return False
+
         if bindings:
+            binding_hits = 0
             for binding in bindings:
                 obj = binding.get("object")
                 color = binding.get("color")
                 if obj in cand_categories and color in cand_colors:
-                    soft_hits += 1
-                    break
+                    binding_hits += 1
+            # For relaxed mode, require at least one binding hit when bindings are present.
+            return binding_hits > 0
 
-        # If only categories are requested, category overlap is enough.
-        if query_categories and not (query_colors or query_styles or query_environments or bindings):
-            return True
-
-        requested_soft_signals = int(bool(query_colors)) + int(bool(query_styles)) + int(bool(query_environments)) + int(bool(bindings))
-
-        # Keep complex compositional prompts conservative, but allow useful
-        # category+color fallbacks when style/environment tags are sparse.
-        if query_categories and query_colors and requested_soft_signals <= 2:
-            min_soft_hits = 1
-        else:
-            min_soft_hits = 1 if requested_soft_signals <= 1 else 2
-
-        return soft_hits >= min_soft_hits
+        # If no explicit bindings are present, passing category/color checks is enough.
+        return True
 
     #########################################################
 
@@ -295,6 +281,8 @@ class SearchEngine:
 
         # Final conservative fallback: high-confidence category matches only.
         query_categories = set(parsed_query.get("categories", []))
+        query_styles = set(parsed_query.get("styles", []))
+        query_environments = set(parsed_query.get("environments", []))
         has_bindings = bool(parsed_query.get("attribute_bindings", []))
         if query_categories and not has_bindings:
             category_only = [
@@ -307,6 +295,30 @@ class SearchEngine:
                     "message": "No exact attribute match found; showing closest category matches.",
                 }
                 return category_only
+
+        # Soft fallback for simple single-category queries (e.g., "white dress"):
+        # if exact color/style/environment matching is sparse, still return the
+        # closest high-confidence category hits.
+        if len(query_categories) == 1 and not query_styles and not query_environments:
+            simple_category_only = [
+                item for item in bound_results
+                if item.get("category_score", 0.0) >= 0.75
+            ]
+            if simple_category_only:
+                self.last_retrieval_meta = {
+                    "mode": "relaxed",
+                    "message": "No exact match found; showing closest category results.",
+                }
+                return simple_category_only
+
+        # Last resort fallback to keep UX usable: return ranked results instead
+        # of empty list when strict constraints are too sparse/noisy.
+        if bound_results:
+            self.last_retrieval_meta = {
+                "mode": "relaxed",
+                "message": "Showing broad closest matches.",
+            }
+            return bound_results
 
         self.last_retrieval_meta = {
             "mode": "none",
