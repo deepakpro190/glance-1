@@ -4,6 +4,16 @@ Multimodal fashion image retrieval on Fashionpedia using SigLIP + FAISS + struct
 
 This README reflects the current code in this workspace.
 
+PICTURES OF WORKING OF PROJECT:
+
+<img width="617" height="911" alt="Screenshot 2026-07-18 162000" src="https://github.com/user-attachments/assets/ed1f3fa5-68d6-482a-8252-09857b6ad1b8" />
+<img width="1891" height="756" alt="Screenshot 2026-07-18 200041" src="https://github.com/user-attachments/assets/3f50cf5a-9879-4247-8fa2-8e1336f575f1" />
+<img width="1773" height="916" alt="Screenshot 2026-07-18 200049" src="https://github.com/user-attachments/assets/496831e6-cde5-43b4-9d11-415199f23491" />
+<img width="1851" height="935" alt="Screenshot 2026-07-18 200106" src="https://github.com/user-attachments/assets/359a3618-28b1-4760-b2c3-b60c7d1096db" />
+<img width="1655" height="872" alt="Screenshot 2026-07-18 200114" src="https://github.com/user-attachments/assets/9cbac62e-c93c-4511-b665-a4a7dbcc9150" />
+
+
+
 ## Assignment Q&A (Max 5)
 
 ### 1) What baseline were we trying to beat?
@@ -197,6 +207,11 @@ Run the simple evaluation script:
     - First run downloads/loads model and dataset caches.
 - Empty results:
     - Check `retrieval_mode` and `message` from API for strict vs relaxed fallback status.
+
+
+This project can be improved significantly with more time and resources. The current version focuses on a practical core pipeline and therefore includes fewer advanced features than originally envisioned, mainly due to time constraints and compute limits; with additional development effort, it can be extended with richer query understanding, stronger reranking, better calibration, larger-scale indexing strategies, and broader evaluation coverage.
+
+
 
 ## License
 
