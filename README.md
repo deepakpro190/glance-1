@@ -14,6 +14,7 @@ PICTURES OF WORKING OF PROJECT:
 
 
 
+
 ## Assignment Q&A (Max 5)
 
 ### 1) What baseline were we trying to beat?
@@ -32,18 +33,6 @@ Strict-only retrieval improves precision but can return empty results too often 
 This system adds structured reranking and constraint-aware selection on top of embedding search. In short: better control over query intent, clearer score breakdowns, and more useful behavior for real-world queries than plain nearest-neighbor similarity alone.
 
 ## Assignment Compliance Snapshot
-
-## Pictures of Working Project
-
-![Screenshot 2026-07-18 162000](https://github.com/user-attachments/assets/ed1f3fa5-68d6-482a-8252-09857b6ad1b8)
-
-![Screenshot 2026-07-18 200041](https://github.com/user-attachments/assets/3f50cf5a-9879-4247-8fa2-8e1336f575f1)
-
-![Screenshot 2026-07-18 200049](https://github.com/user-attachments/assets/496831e6-cde5-43b4-9d11-415199f23491)
-
-![Screenshot 2026-07-18 200106](https://github.com/user-attachments/assets/359a3618-28b1-4760-b2c3-b60c7d1096db)
-
-![Screenshot 2026-07-18 200114](https://github.com/user-attachments/assets/9cbac62e-c93c-4511-b665-a4a7dbcc9150)
 
 ### Dataset and Coverage
 
@@ -276,11 +265,6 @@ Run the simple evaluation script:
     - First run downloads/loads model and dataset caches.
 - Empty results:
     - Check `retrieval_mode` and `message` from API for strict vs relaxed fallback status.
-
-
-This project can be improved significantly with more time and resources. The current version focuses on a practical core pipeline and therefore includes fewer advanced features than originally envisioned, mainly due to time constraints and compute limits; with additional development effort, it can be extended with richer query understanding, stronger reranking, better calibration, larger-scale indexing strategies, and broader evaluation coverage.
-
-
 
 ## License
 
