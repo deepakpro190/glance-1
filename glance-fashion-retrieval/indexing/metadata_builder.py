@@ -86,14 +86,20 @@ class MetadataBuilder:
                 matched_colors = [token for token in color_tokens if token in category_name]
                 if matched_colors:
                     colors.extend(matched_colors)
+                elif any(token in category_name for token in ["shirt", "blouse", "dress", "coat", "jacket", "skirt", "pants", "shoe"]):
+                    colors.append("neutral")
 
                 matched_styles = [token for token in style_tokens if token in category_name]
                 if matched_styles:
                     styles.extend(matched_styles)
+                elif any(token in category_name for token in ["shirt", "blouse", "dress", "coat", "jacket", "skirt", "pants", "shoe"]):
+                    styles.append("casual")
 
                 matched_environments = [token for token in environment_tokens if token in category_name]
                 if matched_environments:
                     environments.extend(matched_environments)
+                elif any(token in category_name for token in ["shirt", "blouse", "dress", "coat", "jacket", "skirt", "pants", "shoe"]):
+                    environments.append("indoor")
 
             metadata[str(sample.image_id)] = {
                 "image_id": sample.image_id,
